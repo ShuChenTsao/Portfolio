@@ -1,0 +1,180 @@
+---
+title: "Apriori algorithom for boxoffice association learning"
+author: "第一組"
+date: "2018年5月14日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+require(arules)
+require(arulesViz)
+```
+
+<br/>
+#讀入先前爬下來的dataframe，並整理其中的金錢符號、逗號
+
+
+```{r}
+BoxofficeDF=read.csv("/Users/Eric/Documents/R study/Final Project/BoxofficeDF.csv")
+BoxofficeDF$Total_Gross <- as.character(BoxofficeDF$Total_Gross)
+BoxofficeDF$Total_Gross <- gsub("\\$","", BoxofficeDF$Total_Gross)
+BoxofficeDF$Total_Gross <- gsub(",","", BoxofficeDF$Total_Gross)
+```
+<br/>
+
+#預測的目標：（總票房是否超過一億美元）
+
+```{r}
+BoxofficeDF$over100M <- c("Yes")
+BoxofficeDF[as.numeric(BoxofficeDF$Total_Gross) < 100000000, "over100M"] <- "No"
+```
+
+<br/>
+
+#把上映戲院數量、首週上映戲院數量切成不同的級距
+
+```{r}
+BoxofficeDF$Number_of_Theaters<-gsub(",","", BoxofficeDF$Number_of_Theaters)
+BoxofficeDF$N_Thousand_Theaters<-c(0)
+BoxofficeDF[as.numeric(BoxofficeDF$Number_of_Theaters) >1000, "N_Thousand_Theaters"] <- 1
+BoxofficeDF[as.numeric(BoxofficeDF$Number_of_Theaters) >2000, "N_Thousand_Theaters"] <- 2
+BoxofficeDF[as.numeric(BoxofficeDF$Number_of_Theaters) >3000, "N_Thousand_Theaters"] <- 3
+BoxofficeDF[as.numeric(BoxofficeDF$Number_of_Theaters) >4000, "N_Thousand_Theaters"] <- 4
+
+BoxofficeDF$Number_of_Opening_Theaters<-gsub(",","", BoxofficeDF$Number_of_Opening_Theaters)
+BoxofficeDF$N_Thousand_Opening_Theaters<-c(0)
+BoxofficeDF[as.numeric(BoxofficeDF$Number_of_Opening_Theaters) >1000, "N_Thousand_Opening_Theaters"] <- 1
+BoxofficeDF[as.numeric(BoxofficeDF$Number_of_Opening_Theaters) >2000, "N_Thousand_Opening_Theaters"] <- 2
+BoxofficeDF[as.numeric(BoxofficeDF$Number_of_Opening_Theaters) >3000, "N_Thousand_Opening_Theaters"] <- 3
+BoxofficeDF[as.numeric(BoxofficeDF$Number_of_Opening_Theaters) >4000, "N_Thousand_Opening_Theaters"] <- 4
+
+```
+<br/>
+
+#把numeric的資料轉成factor
+
+```{r}
+BoxofficeDF[,1] <- factor(BoxofficeDF[,1])
+BoxofficeDF[,2] <- factor(BoxofficeDF[,2])
+BoxofficeDF[,5] <- factor(BoxofficeDF[,5])
+BoxofficeDF[,11] <- factor(BoxofficeDF[,11])
+BoxofficeDF[,12] <- factor(BoxofficeDF[,12])
+BoxofficeDF[,13] <- factor(BoxofficeDF[,13])
+```
+<br/>
+
+#用有興趣的資料，做出一個新的dataframe
+
+```{r}
+
+BoxofficeDF_raw2 <- data.frame(BoxofficeDF$Year,BoxofficeDF$Studio, BoxofficeDF$over100M, BoxofficeDF$N_Thousand_Theaters, BoxofficeDF$N_Thousand_Opening_Theaters)
+names(BoxofficeDF_raw2) <- c("Year","Studio","over100M", "n_K", "n_K_open")
+str(BoxofficeDF_raw2)
+```
+
+<br/>
+
+#設定minlen=2,supp=0.05，並進行Apriori Association Learning
+
+```{r}
+rule <- apriori(BoxofficeDF_raw2, 
+                parameter=list(minlen=2, supp=0.05, conf=0.7),  
+                appearance = list(default="lhs",
+                                  rhs=c("over100M=Yes", "over100M=No") 
+                )
+)  
+
+
+inspect(rule)
+sort.rule <- sort(rule, by="lift")
+inspect(sort.rule)
+
+subset.matrix <- as.matrix(is.subset(x=sort.rule, y=sort.rule))
+subset.matrix[lower.tri(subset.matrix, diag=T)] <- NA
+redundant <- colSums(subset.matrix, na.rm=T) >= 1
+sort.rule <- sort.rule[!redundant]
+inspect(sort.rule)
+
+plot(sort.rule)
+plot(sort.rule, method="graph", control=list(type="items"))
+plot(sort.rule, method="grouped")
+
+```
+<br/>
+
+#設定minlen=2,supp=0.1，並進行Apriori Association Learning
+
+
+```{r}
+
+rule <- apriori(BoxofficeDF_raw2, 
+                parameter=list(minlen=2, supp=0.1, conf=0.7),  
+                appearance = list(default="lhs",
+                                  rhs=c("over100M=Yes", "over100M=No") 
+                )
+)  
+
+
+inspect(rule)
+sort.rule <- sort(rule, by="lift")
+inspect(sort.rule)
+
+subset.matrix <- as.matrix(is.subset(x=sort.rule, y=sort.rule))
+subset.matrix[lower.tri(subset.matrix, diag=T)] <- NA
+redundant <- colSums(subset.matrix, na.rm=T) >= 1
+sort.rule <- sort.rule[!redundant]
+inspect(sort.rule)
+
+plot(sort.rule)
+plot(sort.rule, method="graph", control=list(type="items"))
+plot(sort.rule, method="grouped")
+
+```
+<br/>
+
+#設定minlen=3,supp=0.05，並進行Apriori Association Learning
+
+
+```{r}
+
+rule <- apriori(BoxofficeDF_raw2, 
+                parameter=list(minlen=3, supp=0.05, conf=0.7),  
+                appearance = list(default="lhs",
+                                  rhs=c("over100M=Yes", "over100M=No") 
+                )
+)  
+
+
+inspect(rule)
+sort.rule <- sort(rule, by="lift")
+inspect(sort.rule)
+
+subset.matrix <- as.matrix(is.subset(x=sort.rule, y=sort.rule))
+subset.matrix[lower.tri(subset.matrix, diag=T)] <- NA
+redundant <- colSums(subset.matrix, na.rm=T) >= 1
+sort.rule <- sort.rule[!redundant]
+inspect(sort.rule)
+
+plot(sort.rule)
+plot(sort.rule, method="graph", control=list(type="items"))
+plot(sort.rule, method="grouped")
+
+
+```
+<br/>
+
+#小結：
+<br/>
+經由三組不同的參數選擇，做出來的結果雖略有不同，但有效預測總票房超過一億美元的關鍵在於觀察以下三點：是否為電影景氣好的2013年、首週上映戲院數是否為四千級距、總上映戲院數是否為四千級距。<br/>
+<br/>
+反面來說，association上能夠有效預測票房無法超過一億美元的組合較多，有較多可以做後續深入探討的地方，如圖中所示。<br/>
+<br/>
+<br/>
+
+
