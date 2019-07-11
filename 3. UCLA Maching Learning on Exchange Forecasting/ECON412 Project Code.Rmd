@@ -1,0 +1,1202 @@
+---
+title: "ECON 412 Final Project"
+author: "Shu-Chen Tsao, Nichanan Logewitool, Xinru Gao"
+date: "5/31/2019"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Introduction  
+  
+# Data Description  
+  
+In this project, we want to classify whether the exchange rate next month will go up or go down (i.e., a directional forecast).  
+  
+The predictors are the growth rate of unemployment rate, the growth rate of interest rate, and the growth rate of the price level (i.e., the inflation rate). Because one exchange rate pair is defined by two currencies, such as the Japan/US exchange rate pair, the three predictors for both of the countries will be included. Therefore, there will be six regressors.  
+  
+The data is downloaded from the Fred Database, the time frame is from Feb. 2000 to Jan. 2019 and the detailed description is shown below.  
+  
+Daily Data (Convert to Month Data):  
+1. 3-Month London Interbank Offered Rate (LIBOR), based on British Pound. Frequency: daily. Unit: percent, not seasonally adjusted.  
+  
+2. 3-Month London Interbank Offered Rate (LIBOR), based on Japanese Yen. Frequency: daily. Unit: percent, not seasonally adjusted.  
+  
+3. 3-Month London Interbank Offered Rate (LIBOR), based on U.S. Dollar. Frequency: daily. Unit: percent, not seasonally adjusted.  
+  
+4. Japan / U.S. Foreign Exchange Rate. Frequency: daily. Unit: Japanese Yen to One U.S. Dollar, Not Seasonally Adjusted.  
+  
+5. U.S. /U.K. Foreign Exchange Rate. Frequency: daily. Unit: U.S. Dollar to One U.K. Pound, Not Seasonally Adjusted.  
+  
+Monthly Data:  
+  
+1. Consumer Price Index: Total All Items for the United States. Frequency: Monthly. Unit: Growth Rate Previous Period, Not Seasonally Adjusted.  
+  
+2. Consumer Price Index: OECD Groups: All Items Non-Food and Non-Energy for Japan. Frequency: Monthly. Unit: Growth Rate Previous Period, Not Seasonally Adjusted.  
+  
+3. Consumer Price Index: OECD Groups: All Items Non-Food and Non-Energy for the United Kingdom. Frequency: Monthly. Unit: Growth Rate Previous Period, Not Seasonally Adjusted.  
+  
+4. Consumer Price Index: Harmonized Prices: Total All Items Less Food, Energy, Tobacco, and Alcohol for the European Union. Frequency: Monthly. Unit: Growth Rate Previous Period, Not Seasonally Adjusted.  
+  
+5. Civilian Unemployment Rate of the United States. Frequency: Monthly. Units: Percent, Not Seasonally Adjusted.  
+  
+6. Unemployment Rate: Aged 15-64: All Persons for Japan. Frequency: Monthly. Units: Percent, Not Seasonally Adjusted.  
+  
+7. Registered Unemployment Rate for the United Kingdom. Frequency: Monthly. Units: Percent, Not Seasonally Adjusted.  
+  
+8. Frequency: Monthly. Units: Percent, Not Seasonally Adjusted. Frequency: Monthly. Units: Percent, Not Seasonally Adjusted.  
+  
+```{r}
+library(forecast) 
+library(ggplot2) 
+library(lmtest)
+library(readxl)
+Data <- read_excel("412_Data.xls")
+```
+  
+Extract the predictors and the labels for different exchange rate pairs.    
+  
+```{r}
+JPUS <- Data[, c(28, 2:4, 8:27)]
+UKUS <- Data[, c(29, 2:4, 8:27)]
+EUUS <- Data[, c(30, 2:4, 8:27)]
+```
+
+# Training-Testing Splitting
+  
+Then, split the data into the training set and the testing set according to the three exchange rate pairs. Use data from 2000 to 2012 as the training set, and data from 2013 to 2019 as the testing set.  
+  
+```{r}
+JPUS_Train <- JPUS[1:156, ]
+JPUS_Test  <- JPUS[157:228, ]
+
+UKUS_Train <- UKUS[1:156, ]
+UKUS_Test  <- UKUS[157:228, ]
+
+EUUS_Train <- EUUS[1:156, ]
+EUUS_Test  <- EUUS[157:228, ]
+```
+  
+# Model 1 Logistic Regression
+
+1.1 US-JP
+```{r}
+logitMod <- glm(exc_JPUS_grow ~ inflation_US + inflation_JP + Unemp_growth_US + Unemp_growth_JP + int_growth_US + int_growth_JP, data= JPUS_Train, family=binomial(link="logit"))
+
+Model2_prob <- predict(logitMod, JPUS_Train, type="response")  # predicted scores
+
+Model2_hat <- as.numeric(Model2_prob > 0.5)
+```
+
+Plot of predicted probability of the recession = 1 is shown below.
+
+```{r}
+hist(Model2_prob)
+```
+ 
+
+```{r}
+confusion_matrix <- table(JPUS_Train$exc_JPUS_grow, Model2_hat) 
+print(confusion_matrix)
+```
+
+
+```{r}
+error_rate <- (confusion_matrix[1,2] + confusion_matrix[2,1]) /sum(confusion_matrix)
+print(error_rate)
+``` 
+
+Based on the Confusion Matrix and error rate, we can see that most of our prediction is inaccurate. The error rate is 42.3% when applying the model on the training set.
+
+#Confusion Matrix and Error Rate of Applying the Model on the Testing Set
+
+```{r}
+testing_prob <- predict(logitMod, JPUS_Test, type="response")
+testing_hat <- as.numeric(testing_prob > 0.5)
+testing_confusion_matrix <- table(JPUS_Test$exc_JPUS_grow, testing_hat) 
+print(testing_confusion_matrix)
+```
+
+The plot of our prediction using testing data is shown below.
+
+```{r}
+hist(testing_prob)
+```
+
+  
+```{r}
+error_rate <- (testing_confusion_matrix[1,2] + testing_confusion_matrix[2,1]) / sum(testing_confusion_matrix)
+print(error_rate)
+```
+
+For US-JP, the error rate is therefore 51.39% when applying the model on the testing set.
+  
+1.2 US-UK
+```{r}
+logitMod <- glm(exc_UKUS_grow ~ inflation_US + inflation_UK + Unemp_growth_US + Unemp_growth_UK + int_growth_US + int_growth_UK, data= UKUS_Train, family=binomial(link="logit"))
+
+Model2_prob <- predict(logitMod, UKUS_Train, type="response")  # predicted scores
+
+Model2_hat <- as.numeric(Model2_prob > 0.5)
+```
+
+Plot of predicted probability of the recession = 1 is shown below.
+
+```{r}
+hist(Model2_prob)
+```  
+  
+
+```{r}
+confusion_matrix <- table(UKUS_Train$exc_UKUS_grow, Model2_hat) 
+print(confusion_matrix)
+```
+
+
+```{r}
+error_rate <- (confusion_matrix[1,2] + confusion_matrix[2,1]) /sum(confusion_matrix)
+print(error_rate)
+``` 
+
+Based on the Confusion Matrix and error rate, we can see that most of our prediction is inaccurate. The error rate is 44.23% when applying the model on the training set.
+
+#Confusion Matrix and Error Rate of Applying the Model on the Testing Set
+
+```{r}
+testing_prob <- predict(logitMod, UKUS_Test, type="response")
+testing_hat <- as.numeric(testing_prob > 0.5)
+testing_confusion_matrix <- table(UKUS_Test$exc_UKUS_grow, testing_hat) 
+print(testing_confusion_matrix)
+```
+
+The plot of our prediction using testing data is shown below.
+
+```{r}
+hist(testing_prob)
+```
+  
+```{r}
+error_rate <- (testing_confusion_matrix[1,2] + testing_confusion_matrix[2,1]) / sum(testing_confusion_matrix)
+print(error_rate)
+```
+
+For US-UK, the error rate is therefore 41.67% when applying the model on the testing set.
+  
+1.3 US-EU
+```{r}
+logitMod <- glm(exc_EUUS_grow ~ inflation_US + inflation_EU + Unemp_growth_US + Unemp_growth_EU + int_growth_US + int_growth_EU, data= EUUS_Train, family=binomial(link="logit"))
+
+Model2_prob <- predict(logitMod, EUUS_Train, type="response")  # predicted scores
+
+Model2_hat <- as.numeric(Model2_prob > 0.5)
+```
+
+Plot of predicted probability of the recession = 1 is shown below.
+
+```{r}
+hist(Model2_prob)
+```   
+  
+
+```{r}
+confusion_matrix <- table(EUUS_Train$exc_EUUS_grow, Model2_hat) 
+print(confusion_matrix)
+```
+
+
+```{r}
+error_rate <- (confusion_matrix[1,2] + confusion_matrix[2,1]) /sum(confusion_matrix)
+print(error_rate)
+``` 
+
+Based on the Confusion Matrix and error rate, we can see that most of our prediction is inaccurate. The error rate is 42.95% when applying the model on the training set. 
+
+#Confusion Matrix and Error Rate of Applying the Model on the Testing Set
+
+```{r}
+testing_prob <- predict(logitMod, EUUS_Test, type="response")
+testing_hat <- as.numeric(testing_prob > 0.5)
+testing_confusion_matrix <- table(EUUS_Test$exc_EUUS_grow, testing_hat) 
+print(testing_confusion_matrix)
+```
+
+The plot of our prediction using testing data is shown below.
+
+```{r}
+hist(testing_prob)
+```
+
+```{r}
+error_rate <- (testing_confusion_matrix[1,2] + testing_confusion_matrix[2,1]) / sum(testing_confusion_matrix)
+print(error_rate)
+```
+
+For US-EU, the error rate is therefore 45.83% when applying the model on the testing set.
+
+In sum, the forecasing error rate of applying the logistic model on the testing set is 45.83% for the EU/US exchange pair, 41.67% for the UK/US exchange pair, and 51.39% for the Japan/US exchange pair.
+On average, the error rate from applying the models on the testing set is 46.3%.
+
+# Model 2: Ridge Regression  
+
+## The exchange rate of Japanese yen and US Dollar
+
+First, we set up a model matrix (removing the intercept column), store the independent variable as y, and create a vector of lambda values.  
+
+```{r}
+x <- model.matrix( exc_JPUS_grow ~ ., JPUS_Train )[,-1]
+y <- JPUS_Train$exc_JPUS_grow
+lambda <- 10^seq(10, -2, length = 100)
+```
+  
+  
+Fit the Ridge Regression Model:
+```{r}
+library(glmnet)
+#ridge
+ridge.mod <- glmnet(x, y, alpha = 0, lambda = lambda)
+```
+  
+We use cross validation to choose the best lambda:  
+
+```{r}
+cv.ridge <- cv.glmnet(x, y, family='binomial', alpha=0, parallel=TRUE, standardize=TRUE)
+```
+  
+  
+cv.glmnet() function uses cross-validation to work out how well ridge regresssion model generalises, which we can visualise as below:
+```{r}
+plot(cv.ridge)
+```  
+The lowest point in the curve indicates the optimal lambda: the log value of lambda that best minimised the binomial deviance in cross-validation. We can extract this values as following:  
+
+```{r}
+bestlam <- cv.ridge$lambda.min
+bestlam
+```
+
+As for the coefficients of the ridge regression model:  
+
+```{r}
+plot(cv.ridge$glmnet.fit, "lambda", label=TRUE)
+coef(cv.ridge, s = "lambda.min")
+```  
+
+  
+### Confusion Matrix 
+
+#### 1. Confusion Matrix of applying the model on training set  
+
+Make Prediction  
+```{r}
+x_train <- model.matrix(exc_JPUS_grow ~ ., JPUS_Train)[,-1]
+ridge.pred_train <- predict(ridge.mod, s = bestlam, newx = x_train, type = "response")
+ridge.pred_train <- ifelse(ridge.pred_train < 0.5, 0, 1)
+```
+
+  
+Confusion Matrix
+```{r}
+library(caret)
+confusionMatrix(factor(ridge.pred_train),factor(JPUS_Train$exc_JPUS_grow))
+```
+   
+According to the results of confusion matrix, we can see that the accuracy of the ridge regression model is well, which is about 62%. Moreover, as we known, error rate = 1 - accuracy, so the error rate of the model applying on the training data is around 38%.  
+  
+#### 2. Confusion Matrix of applying the model on testing set  
+
+Make Prediction  
+```{r}
+x_test <- model.matrix( exc_JPUS_grow ~ ., JPUS_Test )[,-1]
+ridge.pred_test <- predict(ridge.mod, s = bestlam, newx = x_test, type = "response")
+ridge.pred_test <- ifelse(ridge.pred_test < 0.5, 0, 1)
+```
+
+  
+Confusion Matrix
+```{r}
+confusionMatrix(factor(ridge.pred_test),factor(JPUS_Test$exc_JPUS_grow))
+```  
+
+According to the results of confusion matrix, we can see that the accuracy of the ridge regression model is only 46%, which is pretty low. Moreover, as we known, error rate = 1 - accuracy, so the error rate of the model applying on the testing data is even around 54%. Thus, the ridge regression doesn't perform well on prediction of exchange rate of Japanese yen and US Dollar.  
+  
+
+## The exchange rate of UK Pound and US Dollar
+
+First, we set up a model matrix (removing the intercept column), store the independent variable as y, and create a vector of lambda values.  
+
+```{r}
+x <- model.matrix( exc_UKUS_grow ~ ., UKUS_Train)[,-1]
+y <- UKUS_Train$exc_UKUS_grow
+lambda <- 10^seq(10, -2, length = 100)
+```
+  
+  
+Fit the Ridge Regression Model:
+```{r}
+library(glmnet)
+#ridge
+ridge.mod <- glmnet(x, y, alpha = 0, lambda = lambda)
+```
+  
+We use cross validation to choose the best lambda:  
+
+```{r}
+cv.ridge <- cv.glmnet(x, y, family='binomial', alpha=0, parallel=TRUE, standardize=TRUE)
+```
+  
+  
+cv.glmnet() function uses cross-validation to work out how well ridge regresssion model generalises, which we can visualise as below:
+```{r}
+plot(cv.ridge)
+```  
+The lowest point in the curve indicates the optimal lambda: the log value of lambda that best minimised the binomial deviance in cross-validation. We can extract this values as following:  
+
+```{r}
+bestlam <- cv.ridge$lambda.min
+bestlam
+```
+
+As for the coefficients of the ridge regression model:  
+
+```{r}
+plot(cv.ridge$glmnet.fit, "lambda", label=TRUE)
+coef(cv.ridge, s = "lambda.min")
+```  
+
+  
+### Confusion Matrix 
+
+#### 1. Confusion Matrix of applying the model on training set  
+
+Make Prediction  
+```{r}
+x_train <- model.matrix( exc_UKUS_grow ~ ., UKUS_Train)[,-1]
+ridge.pred_train <- predict(ridge.mod, s = bestlam, newx = x_train, type = "response")
+ridge.pred_train <- ifelse(ridge.pred_train < 0.5, 0, 1)
+```
+
+  
+Confusion Matrix
+```{r}
+library(caret)
+confusionMatrix(factor(ridge.pred_train),factor(UKUS_Train$exc_UKUS_grow))
+```  
+
+
+#### 2. Confusion Matrix of applying the model on testing set  
+
+Make Prediction  
+```{r}
+x_test <- model.matrix( exc_UKUS_grow ~ ., UKUS_Test)[,-1]
+ridge.pred_test <- predict(ridge.mod, s = bestlam, newx = x_test, type = "response")
+ridge.pred_test <- ifelse(ridge.pred_test < 0.5, 0, 1)
+```
+
+  
+Confusion Matrix
+```{r}
+confusionMatrix(factor(ridge.pred_test),factor(UKUS_Test$exc_UKUS_grow))
+```  
+
+
+## The exchange rate of EU Euro and US Dollar
+
+First, we set up a model matrix (removing the intercept column), store the independent variable as y, and create a vector of lambda values.  
+
+```{r}
+x <- model.matrix( exc_EUUS_grow ~ ., EUUS_Train)[,-1]
+y <- EUUS_Train$exc_EUUS_grow
+lambda <- 10^seq(10, -2, length = 100)
+```
+  
+  
+Fit the Ridge Regression Model:
+```{r}
+library(glmnet)
+#ridge
+ridge.mod <- glmnet(x, y, alpha = 0, lambda = lambda)
+```
+  
+We use cross validation to choose the best lambda:  
+
+```{r}
+cv.ridge <- cv.glmnet(x, y, family='binomial', alpha=0, parallel=TRUE, standardize=TRUE)
+```
+  
+  
+cv.glmnet() function uses cross-validation to work out how well ridge regresssion model generalises, which we can visualise as below:
+```{r}
+plot(cv.ridge)
+```  
+
+The lowest point in the curve indicates the optimal lambda: the log value of lambda that best minimised the binomial deviance in cross-validation. We can extract this values as following:  
+
+```{r}
+bestlam <- cv.ridge$lambda.min
+bestlam
+```
+
+As for the coefficients of the ridge regression model:  
+
+```{r}
+plot(cv.ridge$glmnet.fit, "lambda", label=TRUE)
+coef(cv.ridge, s = "lambda.min")
+```  
+
+### Confusion Matrix 
+
+#### 1. Confusion Matrix of applying the model on training set  
+
+Make Prediction  
+```{r}
+x_train <- model.matrix( exc_EUUS_grow ~ ., EUUS_Train)[,-1]
+ridge.pred_train <- predict(ridge.mod, s = bestlam, newx = x_train, type = "response")
+ridge.pred_train <- ifelse(ridge.pred_train < 0.5, 0, 1)
+```
+
+  
+Confusion Matrix
+```{r}
+library(caret)
+confusionMatrix(factor(ridge.pred_train),factor(EUUS_Train$exc_EUUS_grow))
+```  
+
+#### 2. Confusion Matrix of applying the model on testing set  
+
+Make Prediction  
+```{r}
+x_test <- model.matrix( exc_EUUS_grow ~ ., EUUS_Test)[,-1]
+ridge.pred_test <- predict(ridge.mod, s = bestlam, newx = x_test, type = "response")
+ridge.pred_test <- ifelse(ridge.pred_test < 0.5, 0, 1)
+```
+
+  
+Confusion Matrix
+```{r}
+confusionMatrix(factor(ridge.pred_test),factor(EUUS_Test$exc_EUUS_grow))
+```  
+
+
+
+
+
+# Model 4: LASSO Model  
+  
+## The exchange rate of Japanese yen and US Dollar  
+
+First, we set up a model matrix (removing the intercept column), store the independent variable as y, and create a vector of lambda values.  
+
+```{r}
+x <- model.matrix( exc_JPUS_grow ~ ., JPUS_Train )[,-1]
+y <- JPUS_Train$exc_JPUS_grow
+lambda <- 10^seq(10, -2, length = 100)
+```
+
+Let's have a look at the lasso. The big difference here is in the shrinkage term – the lasso takes the absolute value of the coefficient estimates.  
+
+```{r}
+lasso.mod <- glmnet(x, y, alpha = 1, family = "binomial", lambda = lambda)
+```  
+
+We use cross validation to choose the best lambda:  
+
+```{r}
+cv.lasso <- cv.glmnet(x, y, family='binomial', alpha=1, parallel=TRUE, standardize=TRUE)
+```
+  
+cv.glmnet() function uses cross-validation to work out how well ridge regresssion model generalises, which we can visualise as below:
+```{r}
+plot(cv.lasso)
+```  
+
+The lowest point in the curve indicates the optimal lambda: the log value of lambda that best minimised the binomial deviance in cross-validation. We can extract this values as following:  
+
+```{r}
+bestlam <- cv.lasso$lambda.min
+bestlam
+```
+
+As for the coefficients of the LASSO model:  
+
+```{r}
+plot(cv.lasso$glmnet.fit, "lambda", label=TRUE)
+coef(cv.lasso, s = "lambda.min")
+```  
+
+## Confusion Matrix
+
+### 1. Confusion Matrix of applying the model on training data  
+
+Make Prediction
+```{r}
+x_train <- model.matrix(exc_JPUS_grow ~ ., JPUS_Train)[,-1]
+lasso.pred_train <- predict(lasso.mod, s = bestlam, newx = x_train, type = "response")
+lasso.pred_train <- ifelse(lasso.pred_train < 0.5, 0, 1)
+```
+
+Confusion Matrix  
+
+```{r}
+confusionMatrix(factor(lasso.pred_train),factor(JPUS_Train$exc_JPUS_grow))
+```  
+
+### 2. Confusion Matrix of applying the model on testing data
+
+Make Prediction
+```{r}
+x_test <- model.matrix( exc_JPUS_grow ~ ., JPUS_Test )[,-1]
+lasso.pred_test <- predict(lasso.mod, s = bestlam, newx = x_test, type = "response")
+lasso.pred_test <- ifelse(lasso.pred_test < 0.5, 0, 1)
+```
+
+Confusion Matrix  
+
+```{r}
+confusionMatrix(factor(lasso.pred_test),factor(JPUS_Test$exc_JPUS_grow))
+```  
+
+## The exchange rate of UK Pound and US Dollar  
+
+First, we set up a model matrix (removing the intercept column), store the independent variable as y, and create a vector of lambda values.  
+
+```{r}
+x <- model.matrix( exc_UKUS_grow ~ ., UKUS_Train )[,-1]
+y <- UKUS_Train$exc_UKUS_grow
+lambda <- 10^seq(10, -2, length = 100)
+```
+
+Let's have a look at the lasso. The big difference here is in the shrinkage term – the lasso takes the absolute value of the coefficient estimates.  
+
+```{r}
+lasso.mod <- glmnet(x, y, alpha = 1, family = "binomial", lambda = lambda)
+```  
+
+We use cross validation to choose the best lambda:  
+
+```{r}
+cv.lasso <- cv.glmnet(x, y, family='binomial', alpha=1, parallel=TRUE, standardize=TRUE)
+```
+  
+cv.glmnet() function uses cross-validation to work out how well ridge regresssion model generalises, which we can visualise as below:
+```{r}
+plot(cv.lasso)
+```  
+
+The lowest point in the curve indicates the optimal lambda: the log value of lambda that best minimised the binomial deviance in cross-validation. We can extract this values as following:  
+
+```{r}
+bestlam <- cv.lasso$lambda.min
+bestlam
+```
+
+As for the coefficients of the LASSO model:  
+
+```{r}
+plot(cv.lasso$glmnet.fit, "lambda", label=TRUE)
+coef(cv.lasso, s = "lambda.min")
+```  
+
+## Confusion Matrix
+
+### 1. Confusion Matrix of applying the model on training data  
+
+Make Prediction
+```{r}
+x_train <- model.matrix(exc_UKUS_grow ~ ., UKUS_Train)[,-1]
+lasso.pred_train <- predict(lasso.mod, s = bestlam, newx = x_train, type = "response")
+lasso.pred_train <- ifelse(lasso.pred_train < 0.5, 0, 1)
+```
+
+Confusion Matrix  
+
+```{r}
+confusionMatrix(factor(lasso.pred_train),factor(UKUS_Train$exc_UKUS_grow))
+```  
+
+### 2. Confusion Matrix of applying the model on testing data
+
+Make Prediction
+```{r}
+x_test <- model.matrix( exc_UKUS_grow ~ ., UKUS_Test )[,-1]
+lasso.pred_test <- predict(lasso.mod, s = bestlam, newx = x_test, type = "response")
+lasso.pred_test <- ifelse(lasso.pred_test < 0.5, 0, 1)
+```
+
+Confusion Matrix  
+
+```{r}
+confusionMatrix(factor(lasso.pred_test),factor(UKUS_Test$exc_UKUS_grow))
+```  
+
+## The exchange rate of EU Euro and US Dollar  
+
+First, we set up a model matrix (removing the intercept column), store the independent variable as y, and create a vector of lambda values.  
+
+```{r}
+x <- model.matrix( exc_EUUS_grow ~ ., EUUS_Train )[,-1]
+y <- EUUS_Train$exc_EUUS_grow
+lambda <- 10^seq(10, -2, length = 100)
+```
+
+Let's have a look at the lasso. The big difference here is in the shrinkage term – the lasso takes the absolute value of the coefficient estimates.  
+
+```{r}
+lasso.mod <- glmnet(x, y, alpha = 1, family = "binomial", lambda = lambda)
+```  
+
+We use cross validation to choose the best lambda:  
+
+```{r}
+cv.lasso <- cv.glmnet(x, y, family='binomial', alpha=1, parallel=TRUE, standardize=TRUE)
+```
+  
+cv.glmnet() function uses cross-validation to work out how well ridge regresssion model generalises, which we can visualise as below:
+```{r}
+plot(cv.lasso)
+```  
+
+The lowest point in the curve indicates the optimal lambda: the log value of lambda that best minimised the binomial deviance in cross-validation. We can extract this values as following:  
+
+```{r}
+bestlam <- cv.lasso$lambda.min
+bestlam
+```
+
+As for the coefficients of the LASSO model:  
+
+```{r}
+plot(cv.lasso$glmnet.fit, "lambda", label=TRUE)
+coef(cv.lasso, s = "lambda.min")
+```  
+
+## Confusion Matrix
+
+### 1. Confusion Matrix of applying the model on training data  
+
+Make Prediction
+```{r}
+x_train <- model.matrix(exc_EUUS_grow ~ ., EUUS_Train)[,-1]
+lasso.pred_train <- predict(lasso.mod, s = bestlam, newx = x_train, type = "response")
+lasso.pred_train <- ifelse(lasso.pred_train < 0.5, 0, 1)
+```
+
+Confusion Matrix  
+
+```{r}
+confusionMatrix(factor(lasso.pred_train),factor(EUUS_Train$exc_EUUS_grow))
+```  
+
+### 2. Confusion Matrix of applying the model on testing data
+
+Make Prediction
+```{r}
+x_test <- model.matrix( exc_EUUS_grow ~ ., EUUS_Test )[,-1]
+lasso.pred_test <- predict(lasso.mod, s = bestlam, newx = x_test, type = "response")
+lasso.pred_test <- ifelse(lasso.pred_test < 0.5, 0, 1)
+```
+
+Confusion Matrix  
+
+```{r}
+confusionMatrix(factor(lasso.pred_test),factor(EUUS_Test$exc_EUUS_grow))
+```  
+
+
+# Model 5 Decision Tree
+  
+In this part, we will build one basic tree model and one random forest tree model, and choose the one with lower error rate as our representative of the decieion tree model.  
+
+```{r}
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(randomForest)
+```
+  
+  
+# Model 5.1 Basic Decision Tree
+
+## JP/US Case
+
+```{r}
+tree_model <- rpart(factor(exc_JPUS_grow) ~ . , 
+                    data = JPUS_Train, method = 'class')
+```
+  
+### Relative Importance Plot
+
+```{r}
+tree_relative_importance <- tree_model$variable.importance/sum(tree_model$variable.importance)
+barplot(tree_relative_importance, main="Relative Importance", ylab = "MeanDecreaseGini", 
+        cex.names=0.6, las=2)
+```  
+  
+For the basic tree model, as shown in the relative importance plot, the interest growth rate of Japan has the highest relative importance, and the inflation rate of the US has the lowest.  
+  
+### Tree Plot
+
+```{r}
+rpart.plot(x = tree_model, extra = 106)
+```
+  
+Based on the tree plot, we can see that the splitting starts from if the unemployment growth rate of Japan < 0.076, and so on. There will be 11 partitions in the model when the splitting ends.  
+  
+### Confusion Matrix and Error Rate of Applying the Model on the Training Set
+
+```{r}
+tree_training_yhat <- predict(tree_model, JPUS_Train, type = 'class')
+
+tree_training_confusion_matrix <- table(JPUS_Train$exc_JPUS_grow, tree_training_yhat)
+print(tree_training_confusion_matrix)
+```
+  
+Based on the confusion matrix above, when applying the model on the training set, there are 68 increases in JP/US exchange rate for the next month are correctly forecasted as an increase, and 50 decreases in JP/US exchange rate are correctly forecasted as a decrease.  
+  
+As for the misclassification, there are 13 decreases in JP/US exchange rate for the next month are wrongly forecasted as an increase, and 25 increases in JP/US exchange rate for the next month are wrongly forecasted as a decrease.  
+  
+```{r}
+error_rate <- (tree_training_confusion_matrix[1,2] + tree_training_confusion_matrix[2,1]) /
+              sum(tree_training_confusion_matrix)
+print(error_rate)
+```
+
+The error rate is therefore 19.87% when applying the model on the training set.
+
+### Confusion Matrix and Error Rate of Applying the Model on the Testing Set
+
+```{r}
+tree_testing_yhat <- predict(tree_model, JPUS_Test, type = 'class')
+
+tree_testing_confusion_matrix <- table(JPUS_Test$exc_JPUS_grow, tree_testing_yhat)
+print(tree_testing_confusion_matrix)
+```
+
+Based on the confusion matrix above, when applying the model on the training set, there are 11 increases in JP/US exchange rate for the next month are correctly forecasted as an increase, and 27 decreases in JP/US exchange rate are correctly forecasted as a decrease.  
+  
+As for the misclassification, there are 22 decreases in JP/US exchange rate for the next month are wrongly forecasted as an increase, and 12 increases in JP/US exchange rate for the next month are wrongly forecasted as a decrease.  
+  
+```{r}
+error_rate <- (tree_testing_confusion_matrix[1,2] + tree_testing_confusion_matrix[2,1]) /
+              sum(tree_testing_confusion_matrix)
+print(error_rate)
+```
+
+The error rate is therefore 47.22% when applying the model on the testing set.
+
+
+## UK/US Case
+
+```{r}
+tree_model <- rpart(factor(exc_UKUS_grow) ~ . , 
+                    data = UKUS_Train, method = 'class')
+```
+  
+### Relative Importance Plot
+
+```{r}
+tree_relative_importance <- tree_model$variable.importance/sum(tree_model$variable.importance)
+barplot(tree_relative_importance, main="Relative Importance", ylab = "MeanDecreaseGini", 
+        cex.names=0.6, las=2)
+```  
+  
+### Tree Plot
+
+```{r}
+rpart.plot(x = tree_model, extra = 106)
+```
+
+### Confusion Matrix and Error Rate of Applying the Model on the Training Set
+
+```{r}
+tree_training_yhat <- predict(tree_model, UKUS_Train, type = 'class')
+
+tree_training_confusion_matrix <- table(UKUS_Train$exc_UKUS_grow, tree_training_yhat)
+print(tree_training_confusion_matrix)
+```
+  
+```{r}
+error_rate <- (tree_training_confusion_matrix[1,2] + tree_training_confusion_matrix[2,1]) /
+              sum(tree_training_confusion_matrix)
+print(error_rate)
+```
+
+### Confusion Matrix and Error Rate of Applying the Model on the Testing Set
+
+```{r}
+tree_testing_yhat <- predict(tree_model, UKUS_Test, type = 'class')
+
+tree_testing_confusion_matrix <- table(UKUS_Test$exc_UKUS_grow, tree_testing_yhat)
+print(tree_testing_confusion_matrix)
+```
+
+```{r}
+error_rate <- (tree_testing_confusion_matrix[1,2] + tree_testing_confusion_matrix[2,1]) /
+              sum(tree_testing_confusion_matrix)
+print(error_rate)
+```
+
+
+## EU/US Case
+
+```{r}
+tree_model <- rpart(factor(exc_EUUS_grow) ~ . , 
+                    data = EUUS_Train, method = 'class')
+```
+  
+### Relative Importance Plot
+
+```{r}
+tree_relative_importance <- tree_model$variable.importance/sum(tree_model$variable.importance)
+barplot(tree_relative_importance, main="Relative Importance", ylab = "MeanDecreaseGini", 
+        cex.names=0.6, las=2)
+```  
+  
+### Tree Plot
+
+```{r}
+rpart.plot(x = tree_model, extra = 106)
+```
+
+### Confusion Matrix and Error Rate of Applying the Model on the Training Set
+
+```{r}
+tree_training_yhat <- predict(tree_model, EUUS_Train, type = 'class')
+
+tree_training_confusion_matrix <- table(EUUS_Train$exc_EUUS_grow, tree_training_yhat)
+print(tree_training_confusion_matrix)
+```
+  
+```{r}
+error_rate <- (tree_training_confusion_matrix[1,2] + tree_training_confusion_matrix[2,1]) /
+              sum(tree_training_confusion_matrix)
+print(error_rate)
+```
+
+### Confusion Matrix and Error Rate of Applying the Model on the Testing Set
+
+```{r}
+tree_testing_yhat <- predict(tree_model, EUUS_Test, type = 'class')
+
+tree_testing_confusion_matrix <- table(EUUS_Test$exc_EUUS_grow, tree_testing_yhat)
+print(tree_testing_confusion_matrix)
+```
+
+```{r}
+error_rate <- (tree_testing_confusion_matrix[1,2] + tree_testing_confusion_matrix[2,1]) /
+              sum(tree_testing_confusion_matrix)
+print(error_rate)
+```
+
+In sum, the forecasing error rate of applying the basic desicion tree algorithm on the testing set is 47.22% for the EU/US exchange pair, 47.22% for the UK/US exchange pair, and 61.11% for the Japan/US exchange pair.
+
+
+## Model 5.2 Random Forest
+
+## JP/US Case
+
+### Modeling
+
+```{r}
+set.seed(123)
+rf_model <- randomForest(factor(exc_JPUS_grow) ~ . , 
+                         data = JPUS_Train, importance = T)
+```
+
+### Relative Importance Plot
+
+```{r}
+rf_relative_importance <- importance(rf_model, type  = 2)/sum(importance(rf_model, type  = 2))
+rf_relative_importance <- t(rf_relative_importance)
+barplot(rf_relative_importance, main="Relative Importance", ylab = "MeanDecreaseGini", 
+        cex.names = 0.6, las = 2)
+```
+
+For the random forest model, as shown in the relative importance plot, the unemployment growth rate of Japan has the highest relative importance, and the unemployment growth rate of the UK has the lowest.  
+
+### Confusion Matrix and Error Rate of Applying the Model on the Training Set
+  
+```{r}
+rf_training_yhat <- predict(rf_model, JPUS_Train, type = 'class')
+
+rf_training_confusion_matrix <- table(JPUS_Train$exc_JPUS_grow, rf_training_yhat)
+print(rf_training_confusion_matrix)
+```
+  
+Based on the confusion matrix above, when applying the model on the training set, all increases in JP/US exchange rate for the next month are correctly forecasted as an increase, and all decreases in JP/US exchange rate for the next month are correctly forecasted as an decrease There is no misclassification.  
+  
+```{r}
+error_rate <- (rf_training_confusion_matrix[1,2] + rf_training_confusion_matrix[2,1]) /
+              sum(rf_training_confusion_matrix)
+print(error_rate)
+```
+
+The error rate is therefore 0% when applying the model on the training set.
+
+### Confusion Matrix and Error Rate of Applying the Model on the Testing Set
+
+```{r}
+rf_testing_yhat <- predict(rf_model, JPUS_Test, type = 'class')
+
+rf_testing_confusion_matrix <- table(JPUS_Test$exc_JPUS_grow, rf_testing_yhat)
+print(rf_testing_confusion_matrix)
+```
+
+Based on the confusion matrix above, when applying the model on the training set, there are 36 increases in JP/US exchange rate for the next month are correctly forecasted as an increase, and 7 decreases in JP/US exchange rate are correctly forecasted as a decrease.  
+  
+As for the misclassification, there are 26 decreases in JP/US exchange rate for the next month are wrongly forecasted as an increase, and 3 increases in JP/US exchange rate for the next month are wrongly forecasted as a decrease. 
+
+```{r}
+error_rate <- (rf_testing_confusion_matrix[1,2] + rf_testing_confusion_matrix[2,1]) /
+              sum(rf_testing_confusion_matrix)
+print(error_rate)
+```
+  
+The error rate is therefore 40.28% when applying the model on the testing set.  
+  
+  
+## UK/US Case  
+  
+```{r}
+set.seed(123)
+rf_model <- randomForest(factor(exc_UKUS_grow) ~ . , 
+                         data = UKUS_Train, importance = T)
+```
+
+### Relative Importance Plot
+
+```{r}
+rf_relative_importance <- importance(rf_model, type  = 2)/sum(importance(rf_model, type  = 2))
+rf_relative_importance <- t(rf_relative_importance)
+barplot(rf_relative_importance, main="Relative Importance", ylab = "MeanDecreaseGini", 
+        cex.names = 0.6, las = 2)
+```
+
+### Confusion Matrix and Error Rate of Applying the Model on the Training Set
+
+```{r}
+rf_training_yhat <- predict(rf_model, UKUS_Train, type = 'class')
+
+rf_training_confusion_matrix <- table(UKUS_Train$exc_UKUS_grow, rf_training_yhat)
+print(rf_training_confusion_matrix)
+```
+
+### Confusion Matrix and Error Rate of Applying the Model on the Testing Set
+
+```{r}
+rf_testing_yhat <- predict(rf_model, UKUS_Test, type = 'class')
+
+rf_testing_confusion_matrix <- table(UKUS_Test$exc_UKUS_grow, rf_testing_yhat)
+print(rf_testing_confusion_matrix)
+```
+
+```{r}
+error_rate <- (rf_testing_confusion_matrix[1,2] + rf_testing_confusion_matrix[2,1]) /
+              sum(rf_testing_confusion_matrix)
+print(error_rate)
+```
+  
+The error rate is therefore 56.95% when applying the model on the testing set.  
+  
+  
+## EU/US Case  
+  
+```{r}
+set.seed(123)
+rf_model <- randomForest(factor(exc_EUUS_grow) ~ . , 
+                         data = EUUS_Train, importance = T)
+```
+
+### Relative Importance Plot
+
+```{r}
+rf_relative_importance <- importance(rf_model, type  = 2)/sum(importance(rf_model, type  = 2))
+rf_relative_importance <- t(rf_relative_importance)
+barplot(rf_relative_importance, main="Relative Importance", ylab = "MeanDecreaseGini", 
+        cex.names = 0.6, las = 2)
+```
+
+### Confusion Matrix and Error Rate of Applying the Model on the Training Set
+
+```{r}
+rf_training_yhat <- predict(rf_model, EUUS_Train, type = 'class')
+
+rf_training_confusion_matrix <- table(EUUS_Train$exc_EUUS_grow, rf_training_yhat)
+print(rf_training_confusion_matrix)
+```
+
+### Confusion Matrix and Error Rate of Applying the Model on the Testing Set
+
+```{r}
+rf_testing_yhat <- predict(rf_model, EUUS_Test, type = 'class')
+
+rf_testing_confusion_matrix <- table(EUUS_Test$exc_EUUS_grow, rf_testing_yhat)
+print(rf_testing_confusion_matrix)
+```
+
+```{r}
+error_rate <- (rf_testing_confusion_matrix[1,2] + rf_testing_confusion_matrix[2,1]) / 
+              sum(rf_testing_confusion_matrix)
+print(error_rate)
+```
+
+The error rate is therefore 41.67% when applying the model on the testing set.  
+
+In sum, the forecasing error rate of applying the random forest algorithm on the testing set is 40.28% for the EU/US exchange pair, 41.67% for the UK/US exchange pair, and 56.95% for the Japan/US exchange pair.
+
+
+
+
+# Model 6: Recursive KNN
+
+## JP/US Case
+
+```{r}
+library(class)
+movingKnnJPUS_hat <- rep(NA, 72)
+
+set.seed(333)
+for (i in 1:72){
+  labals = JPUS[1:(i+155) ,1]
+  movingKnnJPUS_hat[i] <- knn(JPUS[1:(i+155), -1], JPUS[(i+156), -1], labals$exc_JPUS_grow, k = 10)
+  movingKnnJPUS_hat[i] <- movingKnnJPUS_hat[i] - 1
+}
+```
+
+### Confusion Matrix and Error Rate
+
+```{r}
+knn_moving_confusion_matrix <- table(JPUS_Test$exc_JPUS_grow, movingKnnJPUS_hat)
+print(knn_moving_confusion_matrix)
+```
+
+```{r}
+error_rate <- (knn_moving_confusion_matrix[1,2] + knn_moving_confusion_matrix[2,1]) / 
+              sum(knn_moving_confusion_matrix)
+print(error_rate)
+```
+
+## UK/US Case
+
+```{r}
+movingKnnUKUS_hat <- rep(NA, 72)
+
+set.seed(333)
+for (i in 1:72){
+  labals = UKUS[1:(i+155) ,1]
+  movingKnnUKUS_hat[i] <- knn(UKUS[1:(i+155), -1], UKUS[(i+156), -1], labals$exc_UKUS_grow, k = 10)
+  movingKnnUKUS_hat[i] <- movingKnnUKUS_hat[i] - 1
+}
+```
+
+### Confusion Matrix and Error Rate
+
+```{r}
+knn_moving_confusion_matrix <- table(UKUS_Test$exc_UKUS_grow, movingKnnUKUS_hat)
+print(knn_moving_confusion_matrix)
+```
+
+```{r}
+error_rate <- (knn_moving_confusion_matrix[1,2] + knn_moving_confusion_matrix[2,1]) / 
+              sum(knn_moving_confusion_matrix)
+print(error_rate)
+```
+
+## EU/US Case
+
+```{r}
+movingKnnEUUS_hat <- rep(NA, 72)
+
+set.seed(333)
+for (i in 1:72){
+  labals = EUUS[1:(i+155) ,1]
+  movingKnnEUUS_hat[i] <- knn(EUUS[1:(i+155), -1], EUUS[(i+156), -1], labals$exc_EUUS_grow, k = 10)
+  movingKnnEUUS_hat[i] <- movingKnnEUUS_hat[i] - 1
+}
+```
+
+### Confusion Matrix and Error Rate
+
+```{r}
+knn_moving_confusion_matrix <- table(EUUS_Test$exc_EUUS_grow, movingKnnEUUS_hat)
+print(knn_moving_confusion_matrix)
+```
+
+```{r}
+error_rate <- (knn_moving_confusion_matrix[1,2] + knn_moving_confusion_matrix[2,1]) / 
+              sum(knn_moving_confusion_matrix)
+print(error_rate)
+```
+
+In sum, the forecasing error rate of applying the recursive KNN algorithm on the testing set is 40.28% for the EU/US exchange pair, 45.83% for the UK/US exchange pair, and 48.61% for the Japan/US exchange pair.
+
+
+# Binomial Test on the best model (Recursive KNN)
+
+```{r}
+binom.test(x = (43 + 39 + 37), n = 72*3, p = 0.5, alternative = "greater")
+```
+
+The p-value of the one-side binomial test is 0.07, therefore, we can reject the null hypothesis that the accuracy rate is not different from 50%, and accept that the accuracy rate is significantly greater than 50%.
+
+# Profitability Measure
+
+```{r}
+HPR_JPUS <- rep(NA, 71)
+
+for (i in 1:71){
+  if (movingKnnJPUS_hat[i]==1){
+    HPR_JPUS[i] <- (JPUS_Test$exc_JP_US[i+1] - JPUS_Test$exc_JP_US[i]) / JPUS_Test$exc_JP_US[i]
+  }
+  else if (movingKnnJPUS_hat[i]==0){
+    HPR_JPUS[i] <- (JPUS_Test$exc_JP_US[i] - JPUS_Test$exc_JP_US[i+1]) / JPUS_Test$exc_JP_US[i]
+  }
+}
+
+HPR_UKUS <- rep(NA, 71)
+
+for (i in 1:71){
+  if (movingKnnUKUS_hat[i]==1){
+    HPR_UKUS[i] <- (UKUS_Test$exc_UK_US[i+1] - UKUS_Test$exc_UK_US[i]) / UKUS_Test$exc_UK_US[i]
+  }
+  else if (movingKnnUKUS_hat[i]==0){
+    HPR_UKUS[i] <- (UKUS_Test$exc_UK_US[i] - UKUS_Test$exc_UK_US[i+1]) / UKUS_Test$exc_UK_US[i]
+  }
+}
+
+HPR_EUUS <- rep(NA, 71)
+
+for (i in 1:71){
+  if (movingKnnEUUS_hat[i]==1){
+    HPR_EUUS[i] <- (EUUS_Test$exc_EU_US[i+1] - EUUS_Test$exc_EU_US[i]) / EUUS_Test$exc_EU_US[i]
+  }
+  else if (movingKnnEUUS_hat[i]==0){
+    HPR_EUUS[i] <- (EUUS_Test$exc_EU_US[i] - EUUS_Test$exc_EU_US[i+1]) / EUUS_Test$exc_EU_US[i]
+  }
+}
+```
+
+```{r}
+totalHPR <- HPR_JPUS + HPR_UKUS + HPR_EUUS
+
+ggplot(data = data.frame(totalHPR), 
+  aes(x = totalHPR*100)) + 
+  geom_histogram(aes(y=..density..), bins = 30) + xlab("HPR (In Persentage)") + ylab("Density") + 
+  ggtitle("Holding Period Return of Applying Recursive KNN") + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  geom_density(aes(y=..density..))
+```
+
+Above is the holding period return of applying the resursive KNN model on buying/selling the three currecncy pairs. We can see that the mean and median is on the positive side, which shows the potential of profitability. 
+
+```{r}
+mean(totalHPR*100)*12
+```
+
+The annualized return of applying the resursive KNN model on the carry trade strategy is 2.49%. 
+
+

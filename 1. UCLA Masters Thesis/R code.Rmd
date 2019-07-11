@@ -1,0 +1,694 @@
+---
+title: "Capstone_0501"
+author: "Shu-Chen Tsao"
+date: "5/1/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(readxl)
+library(readr)
+library(ggplot2)
+library(ggpubr)
+library(tseries)
+library(dplyr)
+library(lubridate)
+library(e1071)
+library(fitdistrplus)
+library(tsoutliers)
+```
+
+# Daily Data Processing
+
+```{r}
+JPInterestRate <- read_excel("Capstone_DailyData/JPInterestRate.xls")
+JPInterestRate <- na.omit(JPInterestRate)
+
+UKInterestRate <- read_excel("Capstone_DailyData/UKInterestRate.xls")
+UKInterestRate <- na.omit(UKInterestRate)
+
+USInterestRate <- read_excel("Capstone_DailyData/USInterestRate.xls")
+USInterestRate <- na.omit(USInterestRate)
+
+JPY_USD <- read_excel("Capstone_DailyData/JPY_USD.xls")
+JPY_USD <- na.omit(JPY_USD)
+
+GBP_USD <- read_excel("Capstone_DailyData/GBP_USD.xls")
+GBP_USD <- na.omit(GBP_USD)
+
+CapstoneDataDaily <- merge(JPInterestRate, UKInterestRate, by = "Date")
+CapstoneDataDaily <- merge(CapstoneDataDaily, USInterestRate, by = "Date")
+CapstoneDataDaily <- merge(CapstoneDataDaily, JPY_USD, by = "Date")
+CapstoneDataDaily <- merge(CapstoneDataDaily, GBP_USD, by = "Date")
+CapstoneDataDaily <- CapstoneDataDaily[3684:8139,]
+
+CapstoneDataDaily$USJPInterestDiff <- CapstoneDataDaily$USInterestRate - CapstoneDataDaily$JPInterestRate
+CapstoneDataDaily$USUKInterestDiff <- CapstoneDataDaily$USInterestRate - CapstoneDataDaily$UKInterestRate
+```
+
+# Visualizing Data
+
+```{r}
+p1 <- ggplot(data = CapstoneDataDaily, aes(x = Date, y = JPY_USD)) + geom_line(size = 0.5) + 
+      xlab("Date") + ylab("JPY per USD") + ggtitle("Time Series Plot of JPY per USD") + 
+      theme(plot.title = element_text(hjust = 0.5))
+
+p2 <- ggplot(data = CapstoneDataDaily, aes(x = Date, y = USJPInterestDiff)) + 
+      geom_line(size = 0.5) + 
+      xlab("Date") + ylab("US - JP Interest Rate Differential") + 
+      ggtitle("Time Series Plot of US - JP Interest Rate Differential") + 
+      theme(plot.title = element_text(hjust = 0.5))
+
+ggarrange(p1, p2, widths = 1:1, nrow = 2)
+```
+
+```{r}
+p3 <- ggplot(data = CapstoneDataDaily, aes(x = Date, y = GBP_USD)) + geom_line(size = 0.5) + 
+      xlab("Date") + ylab("GBP per USD") + ggtitle("Time Series Plot of GBP per USD") + 
+      theme(plot.title = element_text(hjust = 0.5))
+
+p4 <- ggplot(data = CapstoneDataDaily, aes(x = Date, y = USUKInterestDiff)) + 
+      geom_line(size = 0.5) + 
+      xlab("Date") + ylab("US - UK Interest Rate Differential") + 
+      ggtitle("Time Series Plot of US - UK Interest Rate Differential") + 
+      theme(plot.title = element_text(hjust = 0.5))
+
+ggarrange(p3, p4, widths = 1:1, nrow = 2)
+```
+
+# JPY/USD: Kalman Filter of Exchange Rate  
+  
+
+```{r}
+kalmanfilter_modeling <- function(k, y){
+  CapstoneDataDaily$x <- 0
+  CapstoneDataDaily$x[1] <- y[1] 
+  # the initial value of x is the initial value of y
+
+  for (t in 2:length(y)){ # finish the x vector using Kalman filter
+    CapstoneDataDaily$x[t] <- (1-k) * CapstoneDataDaily$x[t-1] + k * y[t]}
+
+  CapstoneDataDaily$yminusx <- y - CapstoneDataDaily$x
+  
+  CapstoneDataDaily$surpriseUP <- 0
+  CapstoneDataDaily$surpriseDN <- 0
+
+  for(i in 2:length(y)){
+    if(CapstoneDataDaily$yminusx[i-1] <= 0 & CapstoneDataDaily$yminusx[i] >= 0 ){
+      CapstoneDataDaily$surpriseUP[i] <- 1
+      }
+    if(CapstoneDataDaily$yminusx[i-1] >= 0 & CapstoneDataDaily$yminusx[i] <= 0 ){
+      CapstoneDataDaily$surpriseDN[i] <- 1
+      }
+  }
+  
+  return(CapstoneDataDaily)
+}
+```
+
+```{r}
+CapstoneDataDaily <- kalmanfilter_modeling(k = 0.1, y = CapstoneDataDaily$USJPInterestDiff)
+```
+
+```{r}
+kal1 <- ggplot(data = CapstoneDataDaily, aes(x = Date, y = USJPInterestDiff)) + geom_line(size = 0.5) + 
+        xlab("Date") + ylab("US - JP Interest Rate Differential") + 
+        ggtitle("Time Series of Interest Rate Differential with Kalman Filter") + 
+        theme(plot.title = element_text(hjust = 0.5)) + 
+        geom_line(aes(y=x), color = "gray", size = 0.5)
+
+kal2 <- ggplot(data = CapstoneDataDaily, aes(x = Date, y = yminusx)) + geom_line(size = 0.5) + 
+        geom_area(fill = "gray") + 
+        xlab("Date") + ylab("Observation - Hidden State") + 
+        ggtitle("Time Series of Observation Interest Rate Differential - Hidden State Interest Rate 
+                Differential") + 
+        theme(plot.title = element_text(hjust = 0.5))
+
+ggarrange(kal1, kal2, widths = 1:1, nrow = 2)
+
+```
+
+```{r}
+print(CapstoneDataDaily[CapstoneDataDaily$surpriseUP == 1, ])
+print(CapstoneDataDaily[CapstoneDataDaily$surpriseDN == 1, ])
+```
+
+```{r}
+kalmanfilter_profit_JPYUSD <- function(horizon = horizon){
+  moneyUSD <- 1000000
+  moneyJPY <- 0
+  i <- 2
+  while (i <= length(CapstoneDataDaily$JPY_USD)){
+  if(CapstoneDataDaily$surpriseDN[i] == 1 & moneyUSD != 0){
+    moneyJPY <- moneyUSD * CapstoneDataDaily$JPY_USD[i]
+    moneyUSD <- 0
+    i <- i + horizon
+  }
+  else if(CapstoneDataDaily$surpriseUP[i] == 1 & moneyJPY != 0){
+    moneyUSD <- moneyJPY / CapstoneDataDaily$JPY_USD[i]
+    moneyJPY <- 0
+    i <- i + horizon
+  } 
+  else {
+    i <- i + 1
+  }  
+  }
+  return((moneyUSD + moneyJPY / CapstoneDataDaily$JPY_USD[length(CapstoneDataDaily$JPY_USD)]))
+}
+```
+
+# ## 
+```{r}
+kalmanfilter_HPR <- function(horizon = horizon){
+  HPR <- c()
+  moneyUSD <- 1000000
+  moneyJPY <- 0
+  oldmoneyUSD <- 0
+  newmoneyUSD <- 0
+  i <- 2
+  while (i <= length(CapstoneDataDaily$JPY_USD)){
+  if(CapstoneDataDaily$surpriseDN[i] == 1 & moneyUSD != 0){
+    moneyJPY <- moneyUSD * CapstoneDataDaily$JPY_USD[i]
+    oldmoneyUSD <- moneyUSD ###
+    moneyUSD <- 0
+    i <- i + horizon
+  }
+  else if(CapstoneDataDaily$surpriseUP[i] == 1 & moneyJPY != 0){
+    moneyUSD <- moneyJPY / CapstoneDataDaily$JPY_USD[i]
+    newmoneyUSD <- moneyUSD
+    HPR <-  c(HPR, ((newmoneyUSD - oldmoneyUSD)/oldmoneyUSD))
+    moneyJPY <- 0
+    i <- i + horizon
+  } 
+  else {
+    i <- i + 1
+  }  
+  }
+  if (moneyJPY != 0){
+    moneyUSD <- moneyJPY / CapstoneDataDaily$JPY_USD[i]
+    newmoneyUSD <- moneyUSD
+    HPR <-  c(HPR, ((newmoneyUSD - oldmoneyUSD)/oldmoneyUSD))
+    moneyJPY <- 0
+  }
+  SharpeRatio <- mean(HPR) / sd(HPR)
+  return(list(HPR, SharpeRatio))
+}
+
+```
+
+```{r}
+#k_vector <- seq(from = 0.01, to = 0.50, by = 0.01)
+#horizon_vector <- seq(from = 1, to = 20, by = 1)
+#SharpeRatiodata <- data.frame(expand.grid(k_vector, horizon_vector))
+#names(SharpeRatiodata) <- c("kalman_gain", "horizon")
+#SharpeRatiodata$SharpeRatio <- 0
+
+#for (i in 1:50){
+#  for (j in 1:20){
+#  CapstoneDataDaily <- kalmanfilter_modeling(k = k_vector[i], y = CapstoneDataDaily$USJPInterestDiff)
+#  SharpeRatiodata$SharpeRatio[(i + (j-1) * 50)] <- kalmanfilter_HPR(horizon = j)[[2]]
+#  }
+#}
+```
+
+```{r}
+#print(SharpeRatiodata[which.max(SharpeRatiodata$SharpeRatio), ])
+#optimalk <- SharpeRatiodata[which.max(SharpeRatiodata$SharpeRatio), 1]
+#optimalhorizon <- SharpeRatiodata[which.max(SharpeRatiodata$SharpeRatio), 2]
+```
+# ## 
+
+
+
+```{r}
+k_vector <- seq(from = 0.01, to = 0.50, by = 0.01)
+horizon_vector <- seq(from = 1, to = 20, by = 1)
+profitdata <- data.frame(expand.grid(k_vector, horizon_vector))
+names(profitdata) <- c("kalman_gain", "horizon")
+profitdata$profit <- 0
+
+for (i in 1:50){
+  for (j in 1:20){
+  CapstoneDataDaily <- kalmanfilter_modeling(k = k_vector[i], y = CapstoneDataDaily$USJPInterestDiff)
+  profitdata$profit[(i + (j-1) * 50)] <- kalmanfilter_profit_JPYUSD(horizon = j)
+  }
+}
+```
+
+```{r}
+print(profitdata[which.max(profitdata$profit), ])
+optimalk <- profitdata[which.max(profitdata$profit), 1]
+optimalhorizon <- profitdata[which.max(profitdata$profit), 2]
+
+CapstoneDataDaily <- kalmanfilter_modeling(k = optimalk, y = CapstoneDataDaily$USJPInterestDiff)
+kalmanfilter_profit_JPYUSD(horizon = optimalhorizon)
+```
+
+```{r}
+kal1 <- ggplot(data = CapstoneDataDaily, aes(x = Date, y = USJPInterestDiff)) + geom_line(size = 0.3) + 
+        xlab("Date") + ylab("JP - US Interest Rate Differential") + 
+        ggtitle("Time Series of Interest Rate Differential with Kalman Filter") + 
+        theme(plot.title = element_text(hjust = 0.5)) + 
+        geom_line(aes(y=x), color = "gray", size = 0.3)
+
+kal2 <- ggplot(data = CapstoneDataDaily, aes(x = Date, y = yminusx)) + geom_line(size = 0.5) + 
+        geom_area(fill = "gray") + 
+        xlab("Date") + ylab("Observation - Hidden State") + 
+        ggtitle("Time Series of Observation Interest Rate Differential - Hidden State Interest Rate 
+                Differential") + 
+        theme(plot.title = element_text(hjust = 0.5))
+
+ggarrange(kal1, kal2, widths = 1:1, nrow = 2)
+
+```
+
+```{r}
+HPR <- kalmanfilter_HPR(horizon = optimalhorizon)[[1]]
+length(HPR)
+
+AnnualReturn <- prod((HPR+1))^(1/18.2) - 1
+print(AnnualReturn)
+
+SharpeRatio <- AnnualReturn / (sd(HPR)*sqrt(length(HPR)/18.2))
+print(SharpeRatio)
+
+Skewness <- skewness(HPR)
+print(Skewness)
+
+kurtosis <- kurtosis(HPR)
+print(kurtosis)
+
+HPR_sign <- as.numeric(HPR > 0)
+
+binom.test(sum(HPR_sign), length(HPR_sign), 0.5, alternative="greater")
+t.test(HPR, alternative = "greater")
+```
+
+
+
+
+
+### Metrics and Results
+
+```{r}
+kalmanfilter_cashflow <- function(horizon = horizon){
+  moneyUSD <- 1000000
+  moneyJPY <- 0
+  i <- 2
+  CapstoneDataDaily$moneyJPY <- 0
+  CapstoneDataDaily$moneyUSD <- 0 
+  CapstoneDataDaily$moneyUSD[1] <- 1000000
+  while (i <= length(CapstoneDataDaily$JPY_USD)){
+    if(CapstoneDataDaily$surpriseDN[i] == 1 & moneyUSD != 0){
+    moneyJPY <- moneyUSD * CapstoneDataDaily$JPY_USD[i]
+    moneyUSD <- 0
+    CapstoneDataDaily$moneyJPY[i] <- moneyJPY
+    i <- i + horizon
+  }
+  else if(CapstoneDataDaily$surpriseUP[i] == 1 & moneyJPY != 0){
+    moneyUSD <- moneyJPY / CapstoneDataDaily$JPY_USD[i]
+    moneyJPY <- 0
+    CapstoneDataDaily$moneyUSD[i] <- moneyUSD
+    i <- i + horizon
+  } 
+  else {
+    i <- i + 1
+  }  
+  }
+  return(CapstoneDataDaily)
+}
+```
+
+```{r}
+CapstoneDataDaily <- kalmanfilter_cashflow(horizon = optimalhorizon)
+
+for (i in 2:length(CapstoneDataDaily$moneyUSD)){
+  if (CapstoneDataDaily$moneyUSD[i]==0 & CapstoneDataDaily$moneyJPY[i]==0 & 
+      CapstoneDataDaily$moneyUSD[i-1]!=0){
+    CapstoneDataDaily$moneyUSD[i] <- CapstoneDataDaily$moneyUSD[i-1]
+  }
+  if (CapstoneDataDaily$moneyUSD[i]==0 & CapstoneDataDaily$moneyJPY[i]==0 & 
+      CapstoneDataDaily$moneyJPY[i-1]!=0){
+    CapstoneDataDaily$moneyJPY[i] <- CapstoneDataDaily$moneyJPY[i-1]
+  }
+}
+
+CapstoneReturn <- CapstoneDataDaily[, c(1,5,13,14)]
+
+
+USDvalue <- ggplot(data = CapstoneDataDaily, aes(x = Date, y = moneyUSD)) + 
+          geom_line(size = 0.5, color = "gray") + geom_area(fill = "gray") + 
+          xlab("Date") + ylab("USD Equity Value") + 
+          ggtitle("Time Series of USD Equity Value") + 
+          theme(plot.title = element_text(hjust = 0.5)) 
+
+JPYvalue <- ggplot(data = CapstoneDataDaily, aes(x = Date, y = moneyJPY)) + 
+          geom_line(size = 0.5, color = "gray") + geom_area(fill = "gray") + 
+          xlab("Date") + ylab("JPY Equity Value") + 
+          ggtitle("Time Series of JPY Equity Value") + 
+          theme(plot.title = element_text(hjust = 0.5)) 
+          
+          
+ggarrange(USDvalue, JPYvalue, widths = 1:1, nrow = 2)
+
+```
+
+```{r}
+CapstoneReturn_USDonly <- CapstoneReturn[,c(1,4)]
+for (i in 2:length(CapstoneReturn_USDonly$moneyUSD)){
+  if (CapstoneReturn_USDonly$moneyUSD[i]==0){
+    CapstoneReturn_USDonly$moneyUSD[i] <- CapstoneReturn_USDonly$moneyUSD[i-1]
+  }
+}
+
+ggplot(data = CapstoneReturn_USDonly, aes(x = Date, y = moneyUSD)) + 
+          geom_line(size = 0.5, color = "gray") + geom_area(fill = "gray") + 
+          xlab("Date") + ylab("Equity Value in USD") + 
+          ggtitle("Time series of Equity Value in USD") + 
+          theme(plot.title = element_text(hjust = 0.5)) 
+
+```
+
+## return distribution
+
+
+```{r}
+ggplot(data = data.frame(HPR),aes(x = HPR*100)) + 
+  geom_histogram(aes(y=..density..), bins = 30) + xlab("Value (In Persentage)") + ylab("Density") + 
+  ggtitle("Density Histogram of the Return Distribution") + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  geom_density(aes(y=..density..))
+```
+
+```{r}
+summary(HPR*100)
+sd(HPR*100)
+jarque.bera.test(HPR)
+```
+
+
+
+
+
+## Gini
+
+```{r}
+HPR_sorted <- sort(HPR)
+HPR_cumulative <- cumsum(HPR_sorted)
+
+HPR_cumulative_dataframe <- data.frame(Index <- 1:length(HPR_cumulative), HPR_cumulative = HPR_cumulative)
+
+ggplot(data = HPR_cumulative_dataframe, aes(x = Index, y = HPR_cumulative)) + 
+          geom_line(size = 0.5) + 
+          xlab("Index") + ylab("Cumulative Return (Arithmatic)") + 
+          ggtitle("Cumulative Sum of Return") + 
+          theme(plot.title = element_text(hjust = 0.5)) 
+```
+
+```{r}
+upper <- (HPR_cumulative[1] - min(HPR_cumulative))
+lower <- (HPR_cumulative[length(HPR_cumulative)] - min(HPR_cumulative))
+totalarea <- (upper + lower) * (length(HPR_cumulative)) / 2
+
+belowline <- sum(HPR_cumulative - min(HPR_cumulative))
+
+gini <- (totalarea - belowline) / totalarea
+print(gini)
+```
+
+
+
+# GBP - USD
+
+```{r}
+CapstoneDataDaily <- kalmanfilter_modeling(k = 0.1, y = CapstoneDataDaily$USUKInterestDiff)
+```
+
+```{r}
+kal1 <- ggplot(data = CapstoneDataDaily, aes(x = Date, y = USUKInterestDiff)) + geom_line(size = 0.3) + 
+        xlab("Date") + ylab("UK - US Interest Rate Differential") + 
+        ggtitle("Time Series of Interest Rate Differential with Kalman Filter") + 
+        theme(plot.title = element_text(hjust = 0.3)) + 
+        geom_line(aes(y=x), color = "gray", size = 0.5)
+
+kal2 <- ggplot(data = CapstoneDataDaily, aes(x = Date, y = yminusx)) + geom_line(size = 0.5) + 
+        geom_area(fill = "gray") + 
+        xlab("Date") + ylab("Observation - Hidden State") + 
+        ggtitle("Time Series of Observation Interest Rate Differential - Hidden State Interest Rate 
+                Differential") + 
+        theme(plot.title = element_text(hjust = 0.5))
+
+ggarrange(kal1, kal2, widths = 1:1, nrow = 2)
+
+```
+
+```{r}
+kalmanfilter_profit_GBPUSD <- function(horizon = horizon){
+  moneyUSD <- 1000000
+  moneyGBP <- 0
+  i <- 2
+  while (i <= length(CapstoneDataDaily$GBP_USD)){
+  if(CapstoneDataDaily$surpriseDN[i] == 1 & moneyUSD != 0){
+    moneyGBP <- moneyUSD * CapstoneDataDaily$GBP_USD[i]
+    moneyUSD <- 0
+    i <- i + horizon
+  }
+  else if(CapstoneDataDaily$surpriseUP[i] == 1 & moneyGBP != 0){
+    moneyUSD <- moneyGBP / CapstoneDataDaily$GBP_USD[i]
+    moneyGBP <- 0
+    i <- i + horizon
+  } 
+  else {
+    i <- i + 1
+  }  
+  }
+  return((moneyUSD + moneyGBP / CapstoneDataDaily$GBP_USD[length(CapstoneDataDaily$GBP_USD)]))
+}
+```
+
+```{r}
+k_vector <- seq(from = 0.01, to = 0.50, by = 0.01)
+horizon_vector <- seq(from = 1, to = 20, by = 1)
+profitdata <- data.frame(expand.grid(k_vector, horizon_vector))
+names(profitdata) <- c("kalman_gain", "horizon")
+profitdata$profit <- 0
+
+for (i in 1:50){
+  for (j in 1:20){
+  CapstoneDataDaily <- kalmanfilter_modeling(k = k_vector[i], y = CapstoneDataDaily$USUKInterestDiff)
+  profitdata$profit[(i + (j-1) * 50)] <- kalmanfilter_profit_GBPUSD(horizon = j)
+  }
+}
+```
+
+```{r}
+print(profitdata[which.max(profitdata$profit), ])
+optimalk <- profitdata[which.max(profitdata$profit), 1]
+optimalhorizon <- profitdata[which.max(profitdata$profit), 2]
+
+CapstoneDataDaily <- kalmanfilter_modeling(k = optimalk, y = CapstoneDataDaily$USUKInterestDiff)
+kalmanfilter_profit_GBPUSD(horizon = optimalhorizon)
+```
+
+```{r}
+kal1 <- ggplot(data = CapstoneDataDaily, aes(x = Date, y = USUKInterestDiff)) + geom_line(size = 0.3) + 
+        xlab("Date") + ylab("UK - US Interest Rate Differential") + 
+        ggtitle("Time Series of Interest Rate Differential with Kalman Filter") + 
+        theme(plot.title = element_text(hjust = 0.5)) + 
+        geom_line(aes(y=x), color = "gray", size = 0.3)
+
+kal2 <- ggplot(data = CapstoneDataDaily, aes(x = Date, y = yminusx)) + geom_line(size = 0.5) + 
+        geom_area(fill = "gray") + 
+        xlab("Date") + ylab("Observation - Hidden State") + 
+        ggtitle("Time Series of Observation Interest Rate Differential - Hidden State Interest Rate 
+                Differential") + 
+        theme(plot.title = element_text(hjust = 0.5))
+
+ggarrange(kal1, kal2, widths = 1:1, nrow = 2)
+
+```
+
+```{r}
+kalmanfilter_HPR_GBPUSD <- function(horizon = horizon){
+  HPR <- c()
+  moneyUSD <- 1000000
+  moneyGBP <- 0
+  oldmoneyUSD <- 0
+  newmoneyUSD <- 0
+  i <- 2
+  while (i <= length(CapstoneDataDaily$GBP_USD)){
+  if(CapstoneDataDaily$surpriseDN[i] == 1 & moneyUSD != 0){
+    moneyGBP <- moneyUSD * CapstoneDataDaily$GBP_USD[i]
+    oldmoneyUSD <- moneyUSD ###
+    moneyUSD <- 0
+    i <- i + horizon
+  }
+  else if(CapstoneDataDaily$surpriseUP[i] == 1 & moneyGBP != 0){
+    moneyUSD <- moneyGBP / CapstoneDataDaily$GBP_USD[i]
+    newmoneyUSD <- moneyUSD
+    HPR <-  c(HPR, ((newmoneyUSD - oldmoneyUSD)/oldmoneyUSD))
+    moneyGBP <- 0
+    i <- i + horizon
+  } 
+  else {
+    i <- i + 1
+  }  
+  }
+  if (moneyGBP != 0){
+    moneyUSD <- moneyGBP / CapstoneDataDaily$GBP_USD[i]
+    newmoneyUSD <- moneyUSD
+    HPR <-  c(HPR, ((newmoneyUSD - oldmoneyUSD)/oldmoneyUSD))
+    moneyGBP <- 0
+  }
+  SharpeRatio <- mean(HPR) / sd(HPR)
+  return(list(HPR, SharpeRatio))
+}
+
+```
+
+```{r}
+HPR <- kalmanfilter_HPR_GBPUSD(horizon = optimalhorizon)[[1]]
+HPR <- na.exclude(HPR)
+length(HPR)
+
+AnnualReturn <- prod((HPR+1))^(1/18.2) - 1
+print(AnnualReturn)
+
+SharpeRatio <- AnnualReturn / (sd(HPR)*sqrt(length(HPR)/18.2))
+print(SharpeRatio)
+
+Skewness <- skewness(HPR)
+print(Skewness)
+
+kurtosis <- kurtosis(HPR)
+print(kurtosis)
+
+sd(HPR)
+
+HPR_sign <- as.numeric(HPR > 0)
+
+binom.test(sum(HPR_sign), length(HPR_sign), 0.5, alternative="greater")
+t.test(HPR, alternative = "greater")
+```
+
+```{r}
+kalmanfilter_cashflow_GBPUSD <- function(horizon = horizon){
+  moneyUSD <- 1000000
+  moneyGBP <- 0
+  i <- 2
+  CapstoneDataDaily$moneyGBP <- 0
+  CapstoneDataDaily$moneyUSD <- 0 
+  CapstoneDataDaily$moneyUSD[1] <- 1000000
+  while (i <= length(CapstoneDataDaily$GBP_USD)){
+    if(CapstoneDataDaily$surpriseDN[i] == 1 & moneyUSD != 0){
+    moneyGBP <- moneyUSD * CapstoneDataDaily$GBP_USD[i]
+    moneyUSD <- 0
+    CapstoneDataDaily$moneyGBP[i] <- moneyGBP
+    i <- i + horizon
+  }
+  else if(CapstoneDataDaily$surpriseUP[i] == 1 & moneyGBP != 0){
+    moneyUSD <- moneyGBP / CapstoneDataDaily$GBP_USD[i]
+    moneyGBP <- 0
+    CapstoneDataDaily$moneyUSD[i] <- moneyUSD
+    i <- i + horizon
+  } 
+  else {
+    i <- i + 1
+  }  
+  }
+  return(CapstoneDataDaily)
+}
+```
+
+```{r}
+CapstoneDataDaily <- kalmanfilter_cashflow_GBPUSD(horizon = optimalhorizon)
+
+for (i in 2:length(CapstoneDataDaily$moneyUSD)){
+  if (CapstoneDataDaily$moneyUSD[i]==0 & CapstoneDataDaily$moneyGBP[i]==0 & 
+      CapstoneDataDaily$moneyUSD[i-1]!=0){
+    CapstoneDataDaily$moneyUSD[i] <- CapstoneDataDaily$moneyUSD[i-1]
+  }
+  if (CapstoneDataDaily$moneyUSD[i]==0 & CapstoneDataDaily$moneyGBP[i]==0 & 
+      CapstoneDataDaily$moneyGBP[i-1]!=0){
+    CapstoneDataDaily$moneyGBP[i] <- CapstoneDataDaily$moneyGBP[i-1]
+  }
+}
+
+CapstoneReturn <- CapstoneDataDaily[, c(1,6,15,14)]
+
+
+USDvalue <- ggplot(data = CapstoneDataDaily, aes(x = Date, y = moneyUSD)) + 
+          geom_line(size = 0.5, color = "gray") + geom_area(fill = "gray") + 
+          xlab("Date") + ylab("USD Equity Value") + 
+          ggtitle("Time Series of USD Equity Value") + 
+          theme(plot.title = element_text(hjust = 0.5)) 
+
+GBPvalue <- ggplot(data = CapstoneDataDaily, aes(x = Date, y = moneyGBP)) + 
+          geom_line(size = 0.5, color = "gray") + geom_area(fill = "gray") + 
+          xlab("Date") + ylab("GBP Equity Value") + 
+          ggtitle("Time Series of GBP Equity Value") + 
+          theme(plot.title = element_text(hjust = 0.5)) 
+          
+          
+ggarrange(USDvalue, GBPvalue, widths = 1:1, nrow = 2)
+
+```
+
+```{r}
+CapstoneReturn_USDonly <- CapstoneReturn[,c(1,4)]
+for (i in 2:length(CapstoneReturn_USDonly$moneyUSD)){
+  if (CapstoneReturn_USDonly$moneyUSD[i]==0){
+    CapstoneReturn_USDonly$moneyUSD[i] <- CapstoneReturn_USDonly$moneyUSD[i-1]
+  }
+}
+
+ggplot(data = CapstoneReturn_USDonly, aes(x = Date, y = moneyUSD)) + 
+          geom_line(size = 0.5, color = "gray") + geom_area(fill = "gray") + 
+          xlab("Date") + ylab("Equity Value in USD") + 
+          ggtitle("Time series of Equity Value in USD") + 
+          theme(plot.title = element_text(hjust = 0.5)) 
+
+```
+
+```{r}
+ggplot(data = data.frame(HPR),aes(x = HPR*100)) + 
+  geom_histogram(aes(y=..density..), bins = 30) + xlab("Value (In Persentage)") + ylab("Density") + 
+  ggtitle("Density Histogram of the Return Distribution") + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  geom_density(aes(y=..density..))
+```
+
+```{r}
+summary(HPR*100)
+jarque.bera.test(HPR)
+```
+
+## Gini
+
+```{r}
+HPR_sorted <- sort(HPR)
+HPR_cumulative <- cumsum(HPR_sorted)
+
+HPR_cumulative_dataframe <- data.frame(Index <- 1:length(HPR_cumulative), HPR_cumulative = HPR_cumulative)
+
+ggplot(data = HPR_cumulative_dataframe, aes(x = Index, y = HPR_cumulative)) + 
+          geom_line(size = 0.5) + 
+          xlab("Index") + ylab("Cumulative Return (Arithmatic)") + 
+          ggtitle("Cumulative Sum of Return") + 
+          theme(plot.title = element_text(hjust = 0.5)) 
+```
+
+```{r}
+upper <- (HPR_cumulative[1] - min(HPR_cumulative))
+lower <- (HPR_cumulative[length(HPR_cumulative)] - min(HPR_cumulative))
+totalarea <- (upper + lower) * (length(HPR_cumulative)) / 2
+
+belowline <- sum(HPR_cumulative - min(HPR_cumulative))
+
+gini <- (totalarea - belowline) / totalarea
+print(gini)
+```
